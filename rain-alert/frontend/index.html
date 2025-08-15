@@ -1,0 +1,105 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Rain Alert</title>
+	<style>
+		body { font-family: system-ui, Arial, sans-serif; margin: 24px; }
+		section { margin-bottom: 24px; padding: 16px; border: 1px solid #e5e7eb; border-radius: 8px; }
+		label { display: block; margin: 8px 0 4px; }
+		input, button { padding: 8px 12px; font-size: 14px; }
+		pre { background: #f8fafc; padding: 12px; border-radius: 6px; overflow: auto; }
+		.small { color: #6b7280; font-size: 12px; }
+	</style>
+</head>
+<body>
+	<h1>Rain Alert</h1>
+	<p class="small">Upload rainfall history, subscribe your phone, and get next-day alerts.</p>
+
+	<section>
+		<h3>1) Upload rainfall CSV</h3>
+		<form id="uploadForm">
+			<input type="file" id="fileInput" accept=".csv" required />
+			<button type="submit">Upload</button>
+		</form>
+		<p class="small">CSV columns: <code>date</code> (YYYY-MM-DD), <code>rainfall_mm</code> (number)</p>
+		<pre id="uploadResult"></pre>
+	</section>
+
+	<section>
+		<h3>2) See next-day prediction</h3>
+		<button id="predictBtn">Get Prediction</button>
+		<pre id="predictOut"></pre>
+	</section>
+
+	<section>
+		<h3>3) Subscribe for SMS alerts</h3>
+		<label>Phone (E.164):</label>
+		<input id="phone" placeholder="+15551234567" />
+		<label>Name (optional):</label>
+		<input id="name" placeholder="Farmer John" />
+		<button id="subscribeBtn">Subscribe</button>
+		<pre id="subsOut"></pre>
+	</section>
+
+	<section>
+		<h3>4) Send alerts now (admin)</h3>
+		<label>Threshold mm:</label>
+		<input id="threshold" type="number" value="1" step="0.1" />
+		<label>Admin API Key (if set):</label>
+		<input id="apiKey" type="password" />
+		<button id="sendAlertsBtn">Send Alerts</button>
+		<pre id="alertsOut"></pre>
+	</section>
+
+	<script>
+		const api = {
+			predict: () => fetch('/api/predict').then(r => r.json()),
+			upload: async (file, apiKey) => {
+				const fd = new FormData();
+				fd.append('file', file);
+				const res = await fetch('/api/data/upload', {
+					method: 'POST',
+					headers: apiKey ? {'x-api-key': apiKey} : {},
+					body: fd
+				});
+				if (!res.ok) throw new Error(await res.text());
+				return res.json();
+			},
+			subscribe: (payload) => fetch('/api/subscribers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(r => r.json()),
+			sendAlerts: (threshold, apiKey) => fetch('/api/alerts/send', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(apiKey ? {'x-api-key': apiKey} : {}) }, body: JSON.stringify({ threshold_mm: parseFloat(threshold) }) }).then(r => r.json())
+		};
+
+		document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+			e.preventDefault();
+			const file = document.getElementById('fileInput').files[0];
+			const apiKey = document.getElementById('apiKey').value;
+			try {
+				const out = await api.upload(file, apiKey);
+				document.getElementById('uploadResult').textContent = JSON.stringify(out, null, 2);
+			} catch (err) {
+				document.getElementById('uploadResult').textContent = err.message;
+			}
+		});
+
+		document.getElementById('predictBtn').addEventListener('click', async () => {
+			const out = await api.predict();
+			document.getElementById('predictOut').textContent = JSON.stringify(out, null, 2);
+		});
+
+		document.getElementById('subscribeBtn').addEventListener('click', async () => {
+			const payload = { phone_e164: document.getElementById('phone').value, name: document.getElementById('name').value };
+			const out = await api.subscribe(payload);
+			document.getElementById('subsOut').textContent = JSON.stringify(out, null, 2);
+		});
+
+		document.getElementById('sendAlertsBtn').addEventListener('click', async () => {
+			const threshold = document.getElementById('threshold').value;
+			const apiKey = document.getElementById('apiKey').value;
+			const out = await api.sendAlerts(threshold, apiKey);
+			document.getElementById('alertsOut').textContent = JSON.stringify(out, null, 2);
+		});
+	</script>
+</body>
+</html>
